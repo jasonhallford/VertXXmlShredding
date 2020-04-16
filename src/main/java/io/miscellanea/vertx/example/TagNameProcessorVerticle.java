@@ -2,6 +2,7 @@ package io.miscellanea.vertx.example;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.Message;
+import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,8 +11,8 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * A worker verticle that counts the unique tag names XML document by working
- * in tandem with <code>TagNameContentHandler</code>.
+ * A worker verticle that counts the unique tag names XML document by working in tandem with <code>
+ * TagNameXmlEventProcessor</code>.
  *
  * @author Jason Hallford
  */
@@ -20,6 +21,7 @@ public class TagNameProcessorVerticle extends AbstractVerticle {
   private static final Logger LOGGER = LoggerFactory.getLogger(TagNameProcessorVerticle.class);
 
   private Map<Integer, TagStats> stats = new HashMap<>();
+  private MessageConsumer<JsonObject> consumer;
 
   // Constructors
   public TagNameProcessorVerticle() {}

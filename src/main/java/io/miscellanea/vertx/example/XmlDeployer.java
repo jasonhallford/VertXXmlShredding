@@ -57,7 +57,7 @@ public class XmlDeployer {
               int shredderCount = config.result().getInteger("shred-verticle-count");
               LOGGER.debug("Deploying {} XML shredding verticle(s).", shredderCount);
 
-              var opts = new DeploymentOptions().setInstances(shredderCount).setWorker(true);
+              var opts = new DeploymentOptions().setInstances(shredderCount);
               vertx.deployVerticle(
                   XmlShredderVerticle.class.getName(),
                   opts,

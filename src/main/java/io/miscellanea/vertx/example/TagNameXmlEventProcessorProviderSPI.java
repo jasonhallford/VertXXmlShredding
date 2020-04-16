@@ -3,7 +3,6 @@ package io.miscellanea.vertx.example;
 import io.vertx.core.Vertx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.xml.sax.helpers.DefaultHandler;
 
 import java.util.Optional;
 
@@ -13,17 +12,17 @@ import java.util.Optional;
  *
  * @author Jason Hallford
  */
-public class TagNameContentHandlerProviderSPI implements ContentHandlerProviderSPI {
+public class TagNameXmlEventProcessorProviderSPI implements XmlEventProcessorProviderSPI {
   // Fields
   private static final Logger LOGGER =
-      LoggerFactory.getLogger(TagNameContentHandlerProviderSPI.class);
+      LoggerFactory.getLogger(TagNameXmlEventProcessorProviderSPI.class);
   private static final String TAG_NAME_CONTENT_HANDLER_PROVIDER =
       "Tag Name Content Handler Provider";
 
   // Constructors
-  public TagNameContentHandlerProviderSPI() {}
+  public TagNameXmlEventProcessorProviderSPI() {}
 
-  // ContentHandlerProviderSPI
+  // XmlEventProcessorProviderSPI
   @Override
   public String getName() {
     return TAG_NAME_CONTENT_HANDLER_PROVIDER;
@@ -35,8 +34,8 @@ public class TagNameContentHandlerProviderSPI implements ContentHandlerProviderS
   }
 
   @Override
-  public Optional<DefaultHandler> provide(String docTypeIdentifier, Vertx vertx, int jobId) {
+  public Optional<XmlEventProcessor> provide(String docTypeIdentifier, Vertx vertx, int jobId) {
     LOGGER.debug("Creating new content handler for job {}.", jobId);
-    return Optional.ofNullable(new TagNameContentHandler(vertx, jobId));
+    return Optional.ofNullable(new TagNameXmlEventProcessor(vertx, jobId));
   }
 }

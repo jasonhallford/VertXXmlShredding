@@ -5,7 +5,10 @@
         </encoder>
     </appender>
 
-    <logger name="io.miscellanea.vertx.example.TagNameContentHandlerProviderSPI" level="debug"/>
+    <!--
+    <logger name="io.miscellanea.vertx.example.TagNameXmlEventProcessorsor" level="debug"/>
+    -->
+    <logger name="io.miscellanea.vertx.example.TagNameProcessorVerticle" level="info"/>
 
     <root level="info">
         <appender-ref ref="STDOUT" />
