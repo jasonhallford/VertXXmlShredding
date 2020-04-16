@@ -7,10 +7,10 @@ import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
 import javax.xml.stream.XMLEventReader;
 import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.events.XMLEvent;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.*;
@@ -43,10 +43,12 @@ public class XmlShredderVerticle extends AbstractVerticle {
   // Fields
   private static final Logger LOGGER = LoggerFactory.getLogger(XmlShredderVerticle.class);
 
-  private SAXParser parser;
-  private final String privateAddress = "xml.shred." + this.hashCode();
   private List<XmlEventProcessorProviderSPI> providers = new ArrayList<>();
   private Map<Integer, ShreddingContext> contexts = new HashMap<>();
+
+  private final String privateNextAddress = "xml.shred.next." + this.hashCode();
+  private final String privateEndAddress = "xml.shred.end." + this.hashCode();
+  private final String privateErrorAddress = "xml.shred.error." + this.hashCode();
 
   // Constructors
   public XmlShredderVerticle() {}
@@ -59,7 +61,7 @@ public class XmlShredderVerticle extends AbstractVerticle {
     // Via the Java Service Loader, load all content handler providers.
     getVertx()
         .executeBlocking(
-            this::initializeVerticle,
+            this::loadContentHandlers,
             result -> {
               if (result.succeeded()) {
                 // Registering shredding handler.
@@ -67,8 +69,11 @@ public class XmlShredderVerticle extends AbstractVerticle {
                 LOGGER.debug("Registered interest in 'xml.shred' address.");
 
                 // Create private address for XML event iteration.
-                getVertx().eventBus().consumer(this.privateAddress, this::nextElement);
-                LOGGER.debug("Registered private event bus address.");
+                getVertx().eventBus().consumer(this.privateNextAddress, this::nextElement);
+                getVertx().eventBus().consumer(this.privateEndAddress, this::endShredding);
+                getVertx().eventBus().consumer(this.privateErrorAddress, this::handleError);
+                LOGGER.debug("Registered private event bus addresses.");
+
                 startPromise.complete();
               } else {
                 startPromise.fail("Unable to initialize XML Shredder verticle.");
@@ -77,36 +82,7 @@ public class XmlShredderVerticle extends AbstractVerticle {
   }
 
   // Initialization
-  private void initializeVerticle(Promise<Object> promise) {
-    if (this.createXmlParser()) {
-      this.loadContentHandlers();
-      LOGGER.debug("Content handlers successfully initialized.");
-      promise.complete();
-    } else {
-      promise.fail("Unable to create SAX parser.");
-    }
-  }
-
-  private boolean createXmlParser() {
-    boolean created = false;
-
-    LOGGER.debug("Creating SAX parser.");
-    try {
-      var factory = SAXParserFactory.newInstance();
-      factory.setNamespaceAware(false);
-      factory.setValidating(false);
-      this.parser = factory.newSAXParser();
-
-      LOGGER.debug("Parser successfully created.");
-      created = true;
-    } catch (Exception e) {
-      LOGGER.error("Unable to create SAX parser; shredding is disabled.", e);
-    }
-
-    return created;
-  }
-
-  private void loadContentHandlers() {
+  private void loadContentHandlers(Promise<Object> promise) {
     LOGGER.debug("Loading content handler providers from classpath.");
 
     try {
@@ -121,8 +97,10 @@ public class XmlShredderVerticle extends AbstractVerticle {
         LOGGER.warn(
             "No content handler providers registered in class path; shredding is disabled.");
       }
+      promise.complete();
     } catch (Exception e) {
       LOGGER.error("Unable to load content handlers; shredding is disabled.", e);
+      promise.fail(e);
     }
   }
 
@@ -141,7 +119,15 @@ public class XmlShredderVerticle extends AbstractVerticle {
     provider.ifPresent(
         p -> {
           var pathToFile = message.body().getString("path-to-file");
-          var processor = p.provide(docType, getVertx(), jobId);
+
+          var processorContext =
+              new XmlEventProcessorContext(
+                  jobId,
+                  getVertx().eventBus(),
+                  this.privateNextAddress,
+                  this.privateEndAddress,
+                  this.privateErrorAddress);
+          var processor = p.provide(processorContext);
 
           try {
             var factory = XMLInputFactory.newInstance();
@@ -149,7 +135,7 @@ public class XmlShredderVerticle extends AbstractVerticle {
                 factory.createXMLEventReader(new BufferedReader(new FileReader(pathToFile)));
 
             this.contexts.put(jobId, new ShreddingContext(xmlEventReader, processor.get()));
-            vertx.eventBus().send(this.privateAddress, new JsonObject().put("job-id", jobId));
+            vertx.eventBus().send(this.privateNextAddress, new JsonObject().put("job-id", jobId));
             LOGGER.info("Begin shredding for XML document '{}' (job = {})", pathToFile, jobId);
           } catch (Exception e) {
             LOGGER.error("Unable to parse document '" + pathToFile + "'.", e);
@@ -165,23 +151,48 @@ public class XmlShredderVerticle extends AbstractVerticle {
 
     if (context.getXmlEventReader().hasNext()) {
       try {
-        var event = context.getXmlEventReader().nextEvent();
-        var result = context.getXmlEventProcessor().process(event);
+        XMLEvent event = context.getXmlEventReader().nextEvent();
+        context.getXmlEventProcessor().process(event);
+      } catch (XMLStreamException e) {
+        LOGGER.error("XML stream processing raised an exception.", e);
 
-        switch (result) {
-          case CONTINUE:
-            vertx.eventBus().send(this.privateAddress, new JsonObject().put("job-id", jobId));
-            break;
-          case HALT:
-          case COMPLETED:
-            LOGGER.info("Shredding completed ({}).", result);
-            context.getXmlEventReader().close();
-            this.contexts.remove(jobId);
-            break;
-        }
-      } catch (Exception e) {
-        LOGGER.error("Received a non-recoverable error while shredding XML document!", e);
+        // Notify the error handler
+        this.getVertx()
+            .eventBus()
+            .send(
+                this.privateErrorAddress,
+                new JsonObject().put("job-id", jobId).put("error-message", e.getMessage()));
       }
     }
+  }
+
+  private void endShredding(Message<JsonObject> message) {
+    var jobId = message.body().getInteger("job-id");
+
+    LOGGER.info("Shredding completed for job {}. Cleaning up context.", jobId);
+    this.cleanupContext(jobId);
+  }
+
+  private void handleError(Message<JsonObject> message) {
+    var jobId = message.body().getInteger("job-id");
+    var error = message.body().getString("error-message");
+
+    LOGGER.warn("Shredding for job {} terminated with an error: {}", jobId,error);
+    this.cleanupContext(jobId);
+  }
+
+  private void cleanupContext(Integer jobId){
+    var context = this.contexts.get(jobId);
+    try {
+      context.getXmlEventReader().close();
+    } catch (XMLStreamException e) {
+      LOGGER.error(
+              "Received an exception closing the XML stream reader for job "
+                      + jobId
+                      + "; cleanup will continue.",
+              e);
+    }
+
+    this.contexts.remove(jobId);
   }
 }

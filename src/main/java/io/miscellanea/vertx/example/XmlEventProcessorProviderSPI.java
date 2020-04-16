@@ -1,7 +1,5 @@
 package io.miscellanea.vertx.example;
 
-import io.vertx.core.Vertx;
-
 import java.util.Optional;
 
 /**
@@ -28,10 +26,8 @@ public interface XmlEventProcessorProviderSPI {
   /**
    * Provides a SAX <code>DefaultContentHandler</code> for the specified XML document type.
    *
-   * @param docTypeIdentifier The document type identifier.
-   * @param vertx A Vert.x instance.
-   * @param jobId The id of the job associated with this handler.
+   * @param context The XML processor's execution context.
    * @return A <code>ContentHandler</code> instance
    */
-  Optional<XmlEventProcessor> provide(String docTypeIdentifier, Vertx vertx, int jobId);
+  Optional<XmlEventProcessor> provide(XmlEventProcessorContext context);
 }

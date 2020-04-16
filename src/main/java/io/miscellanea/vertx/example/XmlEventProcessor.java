@@ -8,5 +8,5 @@ import javax.xml.stream.events.XMLEvent;
  * @author Jason Hallford
  */
 public interface XmlEventProcessor {
-    XmlEventProcessorResult process(XMLEvent xmlEvent);
+    void process(XMLEvent xmlEvent);
 }

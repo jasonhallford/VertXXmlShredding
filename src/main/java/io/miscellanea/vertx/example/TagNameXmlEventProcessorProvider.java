@@ -1,6 +1,5 @@
 package io.miscellanea.vertx.example;
 
-import io.vertx.core.Vertx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,15 +11,15 @@ import java.util.Optional;
  *
  * @author Jason Hallford
  */
-public class TagNameXmlEventProcessorProviderSPI implements XmlEventProcessorProviderSPI {
+public class TagNameXmlEventProcessorProvider implements XmlEventProcessorProviderSPI {
   // Fields
   private static final Logger LOGGER =
-      LoggerFactory.getLogger(TagNameXmlEventProcessorProviderSPI.class);
+      LoggerFactory.getLogger(TagNameXmlEventProcessorProvider.class);
   private static final String TAG_NAME_CONTENT_HANDLER_PROVIDER =
       "Tag Name Content Handler Provider";
 
   // Constructors
-  public TagNameXmlEventProcessorProviderSPI() {}
+  public TagNameXmlEventProcessorProvider() {}
 
   // XmlEventProcessorProviderSPI
   @Override
@@ -34,8 +33,10 @@ public class TagNameXmlEventProcessorProviderSPI implements XmlEventProcessorPro
   }
 
   @Override
-  public Optional<XmlEventProcessor> provide(String docTypeIdentifier, Vertx vertx, int jobId) {
-    LOGGER.debug("Creating new content handler for job {}.", jobId);
-    return Optional.ofNullable(new TagNameXmlEventProcessor(vertx, jobId));
+  public Optional<XmlEventProcessor> provide(XmlEventProcessorContext context) {
+    assert context != null : "context must not be null.";
+    
+    LOGGER.debug("Creating new content handler for job {}.", context.getId());
+    return Optional.ofNullable(new TagNameXmlEventProcessor(context));
   }
 }

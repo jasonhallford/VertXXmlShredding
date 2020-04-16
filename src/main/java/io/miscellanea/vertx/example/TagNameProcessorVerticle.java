@@ -2,7 +2,6 @@ package io.miscellanea.vertx.example;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.eventbus.Message;
-import io.vertx.core.eventbus.MessageConsumer;
 import io.vertx.core.json.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +20,8 @@ public class TagNameProcessorVerticle extends AbstractVerticle {
   private static final Logger LOGGER = LoggerFactory.getLogger(TagNameProcessorVerticle.class);
 
   private Map<Integer, TagStats> stats = new HashMap<>();
-  private MessageConsumer<JsonObject> consumer;
+  private final String docEndAddress = "processor.tag-name.end." + this.hashCode();
+  private final String elementBeginAddress = "processor.tag-name.begin-element." + this.hashCode();
 
   // Constructors
   public TagNameProcessorVerticle() {}
@@ -31,10 +31,10 @@ public class TagNameProcessorVerticle extends AbstractVerticle {
   public void start() {
     // Register handlers
     getVertx().eventBus().consumer("processor.tag-name.begin", this::beginJob);
-    getVertx().eventBus().consumer("processor.tag-name.end", this::endJob);
-    getVertx().eventBus().consumer("processor.tag-name.begin-element", this::beginElement);
+    getVertx().eventBus().consumer(this.docEndAddress, this::endJob);
+    getVertx().eventBus().consumer(this.elementBeginAddress, this::beginElement);
 
-    LOGGER.info("Tag name processing verticle started.");
+    LOGGER.info("Tag name processing verticle started. Private address identifier = {}.", this.hashCode());
   }
 
   // Vert.x handlers
@@ -49,6 +49,14 @@ public class TagNameProcessorVerticle extends AbstractVerticle {
     var jobStats = this.stats.get(jobId);
     jobStats.startMs = System.currentTimeMillis();
     LOGGER.info("Job {} started.", jobId);
+
+    // Return a reply to the sender informing them of this verticle's
+    // private addresses.
+    message.reply(
+        new JsonObject()
+            .put("job-id", jobId)
+            .put("end-address", this.docEndAddress)
+            .put("begin-element-address", this.elementBeginAddress));
   }
 
   private void beginElement(Message<JsonObject> message) {
